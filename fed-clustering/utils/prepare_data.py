@@ -55,7 +55,6 @@ def main():
     parser.add_argument(
         "--columns",
         type=str,
-        required=True,
         help="Comma-separated list of columns to use (including derived columns already present in the dataset)",
     )
     parser.add_argument(
@@ -80,7 +79,10 @@ def main():
     output_dir = os.path.dirname(args.out_path)
     filename = os.path.basename(args.out_path)
 
-    columns_to_use = [col.strip() for col in args.columns.split(",")]
+    columns_to_use = ['COADD_OBJECT_ID', 'MAG_G','MAG_R','MAG_I','MAG_Z','MAG_Y','GMR','RMI','IMZ']
+
+
+    # columns_to_use = [col.strip() for col in args.columns.split(",")]
 
     prepare_data(
         args.input_csv, output_dir, columns_to_use, bool(args.randomize), filename
