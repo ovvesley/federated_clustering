@@ -30,6 +30,7 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
         [
             Attribute("trial_id", AttributeType.TEXT),
             Attribute("dataset_name", AttributeType.TEXT),
+            Attribute("columns_used", AttributeType.TEXT),
             Attribute("randomize", AttributeType.NUMERIC),
             Attribute("out_path", AttributeType.TEXT),
             Attribute("duration", AttributeType.NUMERIC),
@@ -84,17 +85,29 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
     df.add_transformation(tf3)
 
     tf4 = Transformation("InitializeClient")
-    tf4_input = Set(
-        "iInitializeClient",
-        SetType.INPUT,
-        [
-            Attribute("trial_id", AttributeType.TEXT),
-            Attribute("client_id", AttributeType.TEXT),
-            Attribute("n_samples", AttributeType.NUMERIC),
-            Attribute("duration", AttributeType.NUMERIC),
-            Attribute("timestamp", AttributeType.TEXT),
-        ],
-    )
+    if kmeans:
+        tf4_input = Set(
+            "iInitializeClient",
+            SetType.INPUT,
+            [
+                Attribute("trial_id", AttributeType.TEXT),
+                Attribute("client_id", AttributeType.TEXT),
+                Attribute("n_samples", AttributeType.NUMERIC),
+                Attribute("duration", AttributeType.NUMERIC),
+                Attribute("timestamp", AttributeType.TEXT),
+            ],
+        )
+    if dbscan:
+        tf4_input = Set(
+            "iInitializeClient",
+            SetType.INPUT,
+            [
+                Attribute("trial_id", AttributeType.TEXT),
+                Attribute("client_id", AttributeType.TEXT),
+                Attribute("duration", AttributeType.NUMERIC),
+                Attribute("timestamp", AttributeType.TEXT),
+            ],
+        )
 
     tf4_output = Set(
         "oInitializeClient",
@@ -119,7 +132,7 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
                 Attribute("client_id", AttributeType.TEXT),
                 Attribute("current_round", AttributeType.NUMERIC),
                 Attribute("n_clusters", AttributeType.TEXT),
-                Attribute("batch_size", AttributeType.TEXT),
+                Attribute("n_samples", AttributeType.TEXT),
                 Attribute("max_iter", AttributeType.NUMERIC),
                 Attribute("n_init", AttributeType.NUMERIC),
                 Attribute("reassignment_ratio", AttributeType.NUMERIC),
@@ -165,7 +178,7 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
                 Attribute("trial_id", AttributeType.TEXT),
                 Attribute("client_id", AttributeType.TEXT),
                 Attribute("current_round", AttributeType.NUMERIC),
-                Attribute("core_points", AttributeType.TEXT),
+                Attribute("core_points_path", AttributeType.TEXT),
                 Attribute("n_clusters", AttributeType.TEXT),
                 Attribute("count_core_points", AttributeType.TEXT),
                 Attribute("training_time", AttributeType.NUMERIC),
@@ -200,7 +213,8 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
             SetType.INPUT,
             [
                 Attribute("trial_id", AttributeType.TEXT),
-                Attribute("core_points", AttributeType.TEXT),
+                Attribute("core_points_path", AttributeType.TEXT),
+                Attribute("count_core_points", AttributeType.TEXT),
                 Attribute("n_clusters", AttributeType.TEXT),
             ],
     )
@@ -220,19 +234,30 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
     df.add_transformation(tf6)
 
     tf7 = Transformation("Assemble")
+    if kmeans:
+        tf7_input = Set(
+            "iAssemble",
+            SetType.INPUT,
+            [
+                Attribute("trial_id", AttributeType.TEXT),
+                Attribute("current_round", AttributeType.NUMERIC),
+                Attribute("n_feature", AttributeType.NUMERIC),
+                Attribute("n_cluster", AttributeType.NUMERIC),
+                Attribute("timestamp", AttributeType.TEXT),
 
-    tf7_input = Set(
-        "iAssemble",
-        SetType.INPUT,
-        [
-            Attribute("trial_id", AttributeType.TEXT),
-            Attribute("current_round", AttributeType.NUMERIC),
-            Attribute("n_feature", AttributeType.NUMERIC),
-            Attribute("n_cluster", AttributeType.NUMERIC),
-            Attribute("timestamp", AttributeType.TEXT),
+            ],
+        )
+    if dbscan: 
+        tf7_input = Set(
+            "iAssemble",
+            SetType.INPUT,
+            [
+                Attribute("trial_id", AttributeType.TEXT),
+                Attribute("current_round", AttributeType.NUMERIC),
+                Attribute("timestamp", AttributeType.TEXT),
 
-        ],
-    )
+            ],
+        )
 
     if kmeans:
         tf7_output = Set(
@@ -255,7 +280,7 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
             [
                 Attribute("trial_id", AttributeType.TEXT),
                 Attribute("current_round", AttributeType.NUMERIC),
-                Attribute("core_points", AttributeType.TEXT),
+                Attribute("core_points_path", AttributeType.TEXT),
                 Attribute("eps", AttributeType.TEXT),
                 Attribute("min_samples", AttributeType.TEXT),
                 Attribute("dbscan_time", AttributeType.NUMERIC),

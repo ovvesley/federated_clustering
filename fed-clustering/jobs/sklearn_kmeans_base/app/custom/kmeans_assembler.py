@@ -146,7 +146,7 @@ class KMeansAssembler(Assembler):
         t8.add_dataset(t8_input)
         t8_output = DataSet(
             "oAssemble",
-            [Element([self.hash_trial, self.center, self.count, assembling_time, kmeans_time, timestamp])],
+            [Element([self.hash_trial, self.current_round, self.center, self.count, assembling_time, kmeans_time, timestamp])],
         )
         t8.add_dataset(t8_output)
         t8.end()
