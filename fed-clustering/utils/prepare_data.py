@@ -93,7 +93,7 @@ def main():
     to_dfanalyzer = [
         HASH_trial,
         args.input_csv,
-        str(columns_to_use),
+        columns_to_use,
         args.randomize,
         args.out_path,
         duration,
