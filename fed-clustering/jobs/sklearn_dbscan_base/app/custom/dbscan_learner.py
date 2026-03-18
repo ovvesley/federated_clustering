@@ -68,6 +68,7 @@ class DBSCANLearner(Learner):
         eps: float = 0.5,  # Maximum distance between samples to be considered neighbors
         min_samples: int = 5,  # Minimum samples in neighborhood for core point
         random_state: int = None,
+        max_core_points: int = 0,
     ):
         super().__init__()
         self.data_path = data_path
@@ -81,6 +82,135 @@ class DBSCANLearner(Learner):
         # number of training samples (used by NVFlare SKLearnExecutor)
         self.n_samples = None
         self.hash_trial = hash_trial
+        self.max_core_points = int(max_core_points) if max_core_points else 0
+
+    def _sanitize_features(self, x: np.ndarray, fl_ctx: FLContext, stage: str) -> np.ndarray:
+        x_array = np.asarray(x, dtype=np.float32)
+        if x_array.size == 0:
+            return x_array
+
+        finite_mask = np.isfinite(x_array)
+        if finite_mask.all():
+            return x_array
+
+        sanitized = x_array.copy()
+        invalid_count = int(sanitized.size - np.count_nonzero(finite_mask))
+        sanitized[~finite_mask] = np.nan
+
+        col_means = np.nanmean(sanitized, axis=0)
+        col_means = np.where(np.isfinite(col_means), col_means, 0.0).astype(np.float32)
+        nan_rows, nan_cols = np.where(np.isnan(sanitized))
+        sanitized[nan_rows, nan_cols] = col_means[nan_cols]
+
+        self.log_info(
+            fl_ctx,
+            f"Sanitized {invalid_count} non-finite values in {stage} data",
+        )
+        return sanitized
+
+    def _allocate_cluster_budgets(self, cluster_sizes: np.ndarray, budget: int) -> np.ndarray:
+        n_clusters = len(cluster_sizes)
+        allocation = np.zeros(n_clusters, dtype=np.int32)
+
+        if budget <= 0 or n_clusters == 0:
+            return allocation
+
+        sorted_indices = np.argsort(-cluster_sizes)
+        if budget < n_clusters:
+            allocation[sorted_indices[:budget]] = 1
+            return allocation
+
+        allocation = np.minimum(cluster_sizes, 1).astype(np.int32)
+        remaining_budget = budget - int(allocation.sum())
+
+        desired_min = np.minimum(cluster_sizes, 2).astype(np.int32)
+        for cluster_index in sorted_indices:
+            if remaining_budget <= 0:
+                break
+            extra_needed = desired_min[cluster_index] - allocation[cluster_index]
+            if extra_needed <= 0:
+                continue
+            extra = min(int(extra_needed), remaining_budget)
+            allocation[cluster_index] += extra
+            remaining_budget -= extra
+
+        remaining_capacity = np.maximum(cluster_sizes - allocation, 0)
+        if remaining_budget > 0 and remaining_capacity.sum() > 0:
+            proportional = remaining_budget * (remaining_capacity / remaining_capacity.sum())
+            extra_allocation = np.minimum(
+                remaining_capacity,
+                np.floor(proportional).astype(np.int32),
+            )
+            allocation += extra_allocation
+            remaining_budget -= int(extra_allocation.sum())
+            remaining_capacity = np.maximum(cluster_sizes - allocation, 0)
+
+        if remaining_budget > 0:
+            ranked_indices = np.argsort(-remaining_capacity)
+            for cluster_index in ranked_indices:
+                if remaining_budget <= 0:
+                    break
+                if remaining_capacity[cluster_index] <= 0:
+                    continue
+                allocation[cluster_index] += 1
+                remaining_capacity[cluster_index] -= 1
+                remaining_budget -= 1
+
+        return allocation
+
+    def _farthest_point_sample_indices(self, points: np.ndarray, sample_size: int) -> np.ndarray:
+        if sample_size >= len(points):
+            return np.arange(len(points), dtype=np.int64)
+        if sample_size <= 0 or len(points) == 0:
+            return np.array([], dtype=np.int64)
+        if sample_size == 1:
+            centroid = np.mean(points, axis=0)
+            distances = np.linalg.norm(points - centroid, axis=1)
+            return np.array([int(np.argmax(distances))], dtype=np.int64)
+
+        centroid = np.mean(points, axis=0)
+        first_index = int(np.argmax(np.linalg.norm(points - centroid, axis=1)))
+        selected_indices = [first_index]
+        min_distances = np.linalg.norm(points - points[first_index], axis=1)
+
+        while len(selected_indices) < sample_size:
+            next_index = int(np.argmax(min_distances))
+            if next_index in selected_indices:
+                break
+            selected_indices.append(next_index)
+            next_distances = np.linalg.norm(points - points[next_index], axis=1)
+            min_distances = np.minimum(min_distances, next_distances)
+
+        return np.sort(np.asarray(selected_indices, dtype=np.int64))
+
+    def _limit_core_points(
+        self, core_points: np.ndarray, core_labels: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if self.max_core_points <= 0 or len(core_points) <= self.max_core_points:
+            return core_points, core_labels
+
+        labels, inverse_indices, counts = np.unique(
+            core_labels, return_inverse=True, return_counts=True
+        )
+        cluster_budget = self._allocate_cluster_budgets(counts, self.max_core_points)
+        selected_indices = []
+
+        for cluster_position, cluster_label in enumerate(labels):
+            sample_size = int(cluster_budget[cluster_position])
+            if sample_size <= 0:
+                continue
+
+            cluster_indices = np.flatnonzero(inverse_indices == cluster_position)
+            if sample_size >= len(cluster_indices):
+                selected_indices.extend(int(index) for index in cluster_indices)
+                continue
+
+            cluster_points = core_points[cluster_indices]
+            sampled_local_indices = self._farthest_point_sample_indices(cluster_points, sample_size)
+            selected_indices.extend(int(cluster_indices[index]) for index in sampled_local_indices)
+
+        selected_indices = np.sort(np.asarray(selected_indices, dtype=np.int64))
+        return core_points[selected_indices], core_labels[selected_indices]
 
     def load_data(self) -> dict:
         t3 = Task(3, dataflow_tag, "LoadData")
@@ -186,6 +316,7 @@ class DBSCANLearner(Learner):
 
         # Get training data and perform local DBSCAN
         (x_train, y_train, train_size) = self.train_data
+        x_train = self._sanitize_features(x_train, fl_ctx, "train")
         dbscan = DBSCAN(
             eps=self.eps,
             min_samples=self.min_samples,
@@ -196,8 +327,15 @@ class DBSCANLearner(Learner):
         core_mask = np.zeros_like(dbscan.labels_, dtype=bool)
         core_mask[dbscan.core_sample_indices_] = True
         
-        core_points = x_train[core_mask]
-        core_labels = dbscan.labels_[core_mask]
+        core_points = np.asarray(x_train[core_mask], dtype=np.float32)
+        core_labels = np.asarray(dbscan.labels_[core_mask], dtype=np.int32)
+        original_core_point_count = len(core_points)
+        core_points, core_labels = self._limit_core_points(core_points, core_labels)
+        if len(core_points) != original_core_point_count:
+            self.log_info(
+                fl_ctx,
+                f"Limited core points from {original_core_point_count} to {len(core_points)}",
+            )
 
         saved_path = None
         try:
@@ -247,7 +385,7 @@ class DBSCANLearner(Learner):
 
         # Explicitly clean up the DBSCAN model object to prevent serialization issues
         del dbscan
-        
+
         # Ensure all data is serializable before returning
         params = ensure_serializable(params)
         
@@ -272,6 +410,7 @@ class DBSCANLearner(Learner):
 
         # Get validation data
         (x_valid, y_valid, valid_size) = self.valid_data
+        x_valid = self._sanitize_features(x_valid, fl_ctx, "valid")
 
         # Use global parameters for validation
         if global_param and "core_points" in global_param and len(global_param["core_points"]) > 0:
@@ -280,9 +419,10 @@ class DBSCANLearner(Learner):
             
             # Convert lists back to numpy arrays if needed
             if isinstance(core_points, list):
-                core_points = np.array(core_points)
-            if isinstance(core_labels, list):
-                core_labels = np.array(core_labels)
+                core_points = np.asarray(core_points, dtype=np.float32)
+            else:
+                core_points = np.asarray(core_points, dtype=np.float32)
+            core_points = self._sanitize_features(core_points, fl_ctx, "global_core")
             
             # Assign points to nearest core points within eps
             nn = NearestNeighbors(radius=self.eps)

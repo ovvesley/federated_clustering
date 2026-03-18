@@ -69,9 +69,9 @@ class DBSCANAssembler(Assembler):
         core_points_array_list = []
         for cp in core_points_list:
             if isinstance(cp, list):
-                core_points_array_list.append(np.array(cp))
+                core_points_array_list.append(np.asarray(cp, dtype=np.float32))
             else:
-                core_points_array_list.append(cp)
+                core_points_array_list.append(np.asarray(cp, dtype=np.float32))
 
         if not core_points_array_list:
             return np.array([]), np.array([])
@@ -231,12 +231,12 @@ class DBSCANAssembler(Assembler):
             core_points = client_payload.get("core_points", None)
             core_labels = client_payload.get("core_labels", None)
             if core_points is not None and len(core_points) > 0:
-                core_points_list.append(core_points)
+                core_points_list.append(np.asarray(core_points, dtype=np.float32))
                 # If client didn't provide labels, create placeholders
                 if core_labels is None:
-                    core_labels_list.append([0] * len(core_points))
+                    core_labels_list.append(np.zeros(len(core_points), dtype=np.int32))
                 else:
-                    core_labels_list.append(core_labels)
+                    core_labels_list.append(np.asarray(core_labels, dtype=np.int32))
 
         # Merge clusters from all clients
         all_core_points, global_labels = self._merge_clusters(core_points_list, core_labels_list)

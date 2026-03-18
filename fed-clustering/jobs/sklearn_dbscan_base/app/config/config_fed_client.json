@@ -22,7 +22,8 @@
       "path": "dbscan_learner.DBSCANLearner",
       "args": {
         "data_path": "/tmp/nvflare/dataset/sklearn_iris.csv",
-        "random_state": 0
+        "random_state": 0,
+        "max_core_points": 2048
       }
     }
   ]
