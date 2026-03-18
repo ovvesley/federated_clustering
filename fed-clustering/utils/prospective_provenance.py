@@ -30,7 +30,6 @@ def create_dataflow(dataflow_tag: str, algorithm: str = "kmeans"):
         [
             Attribute("trial_id", AttributeType.TEXT),
             Attribute("dataset_name", AttributeType.TEXT),
-            Attribute("columns_used", AttributeType.TEXT),
             Attribute("randomize", AttributeType.NUMERIC),
             Attribute("out_path", AttributeType.TEXT),
             Attribute("duration", AttributeType.NUMERIC),

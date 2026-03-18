@@ -37,7 +37,6 @@ from dfa_lib_python.dependency import Dependency
 
 from time import perf_counter
 import datetime
-from pathlib import Path
 
 dataflow_tag = "nvidiaflare-df"
 
@@ -339,17 +338,13 @@ class DBSCANLearner(Learner):
 
         saved_path = None
         try:
-            artifacts_dir = Path(__file__).resolve().parent / "artifacts"
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-            safe_hash = str(self.hash_trial).replace("/", "_")[:32]
-            filename = f"dbscan_client{self.client_id}_{safe_hash}.npz"
-            file_path = artifacts_dir / filename
+            filename = f"dbscan_client_{self.client_id}_r{curr_round}.npz"
 
             # Ensure numpy arrays for saving
             cp_arr = np.array(core_points)
             cl_arr = np.array(core_labels)
-            np.savez_compressed(str(file_path), core_points=cp_arr, core_labels=cl_arr)
-            saved_path = str(file_path)
+            np.savez_compressed(filename, core_points=cp_arr, core_labels=cl_arr)
+            saved_path = filename
         except Exception as e:
             try:
                 self.log_error(fl_ctx, f"dbscan learner: failed to save artifact: {e}")

@@ -8,7 +8,6 @@ COPY (
         site_name_prefix,
         data_size,
         valid_frac,
-        split_method,
         num_rounds
     FROM iJobConfig
 )
@@ -49,6 +48,19 @@ COPY (
 INTO 'results/oClientTraining.csv' ON CLIENT
 USING DELIMITERS ',', '\n', '"';
 
+-- Client Training Output (local results and timing)
+COPY (
+    SELECT
+        trial_id,
+        client_id,
+        current_round,
+        eps,
+        min_samples,
+        timestamp
+    FROM oClientTraining
+)
+INTO 'results/oClientTraining.csv' ON CLIENT
+USING DELIMITERS ',', '\n', '"';
 -- Aggregated Global Parameters
 COPY (
     SELECT

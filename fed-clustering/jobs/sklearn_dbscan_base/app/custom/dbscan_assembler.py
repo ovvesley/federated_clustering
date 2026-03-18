@@ -25,7 +25,6 @@ from dfa_lib_python.dependency import Dependency
 
 from time import perf_counter
 import datetime
-from pathlib import Path
 
 dataflow_tag = "nvidiaflare-df"
 
@@ -108,19 +107,15 @@ class DBSCANAssembler(Assembler):
         # Save client data to file and store only the path in the analyzer
         saved_path = None
         try:
-            artifacts_dir = Path(__file__).resolve().parent / "artifacts"
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-            safe_hash = str(self.hash_trial).replace("/", "_")[:32]
-            filename = f"dbscan_client_{safe_hash}_r{self.current_round}.npz"
-            file_path = artifacts_dir / filename
+            filename = f"dbscan_client_r{self.current_round}.npz"
 
             core_points = data.get("core_points", [])
             core_labels = data.get("core_labels", [])
             
             cp_arr = np.array(core_points)
             cl_arr = np.array(core_labels)
-            np.savez_compressed(str(file_path), core_points=cp_arr, core_labels=cl_arr)
-            saved_path = str(file_path)
+            np.savez_compressed(filename, core_points=cp_arr, core_labels=cl_arr)
+            saved_path = filename
         except Exception as e:
             try:
                 self.log_error(None, f"dbscan assembler: failed to save client artifact: {e}")
@@ -265,26 +260,21 @@ class DBSCANAssembler(Assembler):
         # in the analyzer payload instead of embedding large arrays.
         saved_path = None
         try:
-            artifacts_dir = Path(__file__).resolve().parent / "artifacts"
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-            safe_hash = str(self.hash_trial).replace("/", "_")[:32]
-            filename = f"dbscan_{safe_hash}_r{self.current_round}.npz"
-            file_path = artifacts_dir / filename
+            filename = f"dbscan_r{self.current_round}.npz"
 
             # numpy can save lists/arrays; convert to arrays for consistency
             cp_arr = np.array(serial_core_points)
             gl_arr = np.array(serial_global_labels)
-            np.savez_compressed(str(file_path), core_points=cp_arr, core_labels=gl_arr)
-            saved_path = str(file_path)
+            np.savez_compressed(filename, core_points=cp_arr, core_labels=gl_arr)
+            saved_path = filename
         except Exception as e:
-            # Log failure but continue; analyzer will see saved_path=None
             try:
-                self.log_error(fl_ctx, f"dbscan assembler: failed to save artifact: {e}")
+                self.log_error(fl_ctx, f"dbscan learner: failed to save artifact: {e}")
             except Exception:
                 pass
 
         # Keep payload small: provide artifact path (or None) plus timing info
-        to_dfanalyzer = ensure_serializable([self.hash_trial, self.current_round, saved_path, float(self.eps), float(self.min_samples), duration, timestamp.isoformat()])
+        to_dfanalyzer = ensure_serializable([self.hash_trial, self.current_round, saved_path, self.eps, self.min_samples, duration, timestamp])
         t6_output = DataSet("oAssemble", [Element(to_dfanalyzer)])
         t6.add_dataset(t6_output)
         t6.end()
