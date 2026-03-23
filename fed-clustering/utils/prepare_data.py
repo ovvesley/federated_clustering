@@ -22,15 +22,23 @@ def prepare_data(
     df = df.fillna(-1)
     df = df.apply(pd.to_numeric, errors="coerce")  # Convert non-numeric to NaN
 
-    columns_to_use = ['COADD_OBJECT_ID', 'MAG_G','MAG_R','MAG_I','MAG_Z','MAG_Y','GMR','RMI','IMZ']
+    df = df[["coadd_object_id", "mag_auto_g_dered", "mag_auto_r_dered", "mag_auto_i_dered", "mag_auto_z_dered", "mag_auto_y_dered"]]
+
+    df["gmr"] = df["mag_auto_g_dered"] - df["mag_auto_r_dered"]
+    df["rmi"] = df["mag_auto_r_dered"] - df["mag_auto_i_dered"]
+    df["imz"] = df["mag_auto_i_dered"] - df["mag_auto_z_dered"]
+    df["zmy"] = df["mag_auto_z_dered"] - df["mag_auto_y_dered"]
+
+    columns_to_use = ["coadd_object_id", "mag_auto_g_dered", "mag_auto_r_dered", "mag_auto_i_dered", "mag_auto_z_dered", "mag_auto_y_dered", "gmr", "rmi", "imz", "zmy"]
     df = df[columns_to_use]
+
 
     if randomize:
         df = df.sample(frac=1, random_state=0).reset_index(drop=True)
 
     ids = (
-        df["COADD_OBJECT_ID"].values
-        if "COADD_OBJECT_ID" in df.columns
+        df["coadd_object_id"].values
+        if "coadd_object_id" in df.columns
         else np.arange(len(df))
     )
     # df = df.drop(columns=["coadd_object_id"], errors="ignore").astype(float)
@@ -40,7 +48,7 @@ def prepare_data(
     filename = filename if filename else "processed_data.csv"
     if file_format == "csv":
         file_path = os.path.join(output_dir, filename)
-        ids_df = pd.DataFrame(ids, columns=["COADD_OBJECT_ID"])
+        ids_df = pd.DataFrame(ids, columns=["coadd_object_id"])
         ids_df.to_csv(file_path, sep=",", index=False, header=True)
         df.to_csv(file_path, sep=",", index=False, header=False)
     else:
@@ -79,7 +87,7 @@ def main():
     output_dir = os.path.dirname(args.out_path)
     filename = os.path.basename(args.out_path)
 
-    columns_to_use = ['COADD_OBJECT_ID', 'MAG_G','MAG_R','MAG_I','MAG_Z','MAG_Y','GMR','RMI','IMZ']
+    columns_to_use = ['coadd_object_id', 'mag_auto_g_dered','mag_auto_r_dered','mag_auto_i_dered','mag_auto_z_dered','mag_auto_y_dered','gmr','rmi','imz','zmy']
 
 
     # columns_to_use = [col.strip() for col in args.columns.split(",")]
