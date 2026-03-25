@@ -49,7 +49,7 @@ class DBSCANAssembler(Assembler):
     def __init__(
         self,
         hash_trial: str = "unknown_trial",
-        eps: float = 0.3,
+        eps: float = 0.5,
         min_samples: int = 5,
     ):
         # Assembler expects a data_kind; use WEIGHTS similar to KMeans implementation
