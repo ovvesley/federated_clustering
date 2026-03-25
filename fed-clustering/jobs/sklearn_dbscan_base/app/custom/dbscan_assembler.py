@@ -49,7 +49,7 @@ class DBSCANAssembler(Assembler):
     def __init__(
         self,
         hash_trial: str = "unknown_trial",
-        eps: float = 0.5,
+        eps: float = 0.3,
         min_samples: int = 5,
     ):
         # Assembler expects a data_kind; use WEIGHTS similar to KMeans implementation
@@ -237,13 +237,45 @@ class DBSCANAssembler(Assembler):
         all_core_points, global_labels = self._merge_clusters(core_points_list, core_labels_list)
 
         # Convert to serializable lists
-        serial_core_points = all_core_points.tolist() if isinstance(all_core_points, np.ndarray) else ensure_serializable(all_core_points)
-        serial_global_labels = [int(x) for x in global_labels.tolist()] if isinstance(global_labels, np.ndarray) else ensure_serializable(global_labels)
+        serial_core_points = (
+            all_core_points.tolist()
+            if isinstance(all_core_points, np.ndarray)
+            else ensure_serializable(all_core_points)
+        )
+        serial_global_labels = (
+            [int(x) for x in global_labels.tolist()]
+            if isinstance(global_labels, np.ndarray)
+            else ensure_serializable(global_labels)
+        )
 
         # Update assembler state
         self.global_core_points = serial_core_points
         self.global_core_labels = serial_global_labels
 
+        # Adapt eps based on global core-point density, if we have enough cores
+        if isinstance(all_core_points, np.ndarray) and len(all_core_points) >= max(
+            10, self.min_samples
+        ):
+            try:
+                # Use k-distance (k = min_samples) on global core points
+                k = int(max(2, self.min_samples))
+                k = min(k, len(all_core_points))
+                nn = NearestNeighbors(n_neighbors=k)
+                nn.fit(all_core_points)
+                dists, _ = nn.kneighbors(all_core_points)
+                kth = dists[:, -1]
+
+                # Pick a robust upper-quantile as global eps candidate
+                new_eps = float(np.percentile(kth, 90))
+
+                # Avoid degenerate values; keep within a reasonable band
+                if np.isfinite(new_eps) and new_eps > 0.0:
+                    # Blend slightly with previous eps for stability
+                    self.eps = 0.5 * float(self.eps) + 0.5 * new_eps
+            except Exception:
+                # On any failure, keep existing eps
+                self.log_warning(fl_ctx, "DBSCAN assembler: failed to adapt eps based on global core points; keeping previous eps")
+                pass
 
         # Prepare params for next round
         params = {

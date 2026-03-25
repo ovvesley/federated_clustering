@@ -4,6 +4,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 from helpers import get_hash_trial
 
@@ -24,6 +25,7 @@ def prepare_data(
 
     df = df[["coadd_object_id", "mag_auto_g_dered", "mag_auto_r_dered", "mag_auto_i_dered", "mag_auto_z_dered", "mag_auto_y_dered"]]
 
+    # Add colour features
     df["gmr"] = df["mag_auto_g_dered"] - df["mag_auto_r_dered"]
     df["rmi"] = df["mag_auto_r_dered"] - df["mag_auto_i_dered"]
     df["imz"] = df["mag_auto_i_dered"] - df["mag_auto_z_dered"]
@@ -31,6 +33,16 @@ def prepare_data(
 
     columns_to_use = ["coadd_object_id", "mag_auto_g_dered", "mag_auto_r_dered", "mag_auto_i_dered", "mag_auto_z_dered", "mag_auto_y_dered", "gmr", "rmi", "imz", "zmy"]
     df = df[columns_to_use]
+
+    # Standardize all feature columns except identifiers/coordinates
+    feature_cols = [
+        c
+        for c in df.columns
+        if c.lower() not in {"coadd_object_id"}
+    ]
+    if feature_cols:
+        scaler = StandardScaler()
+        df[feature_cols] = scaler.fit_transform(df[feature_cols].values)
 
 
     if randomize:
