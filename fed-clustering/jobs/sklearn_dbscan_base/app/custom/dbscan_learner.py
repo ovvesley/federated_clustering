@@ -63,8 +63,8 @@ class DBSCANLearner(Learner):
         data_path: str,
         client_id: int = 0,
         hash_trial: str = "unknown_trial",
-        valid_frac: float = 0.2,
-        eps: float = 0.5,  # Maximum distance between samples to be considered neighbors
+        valid_frac: float = 1,
+        eps: float = 0.1,  # Maximum distance between samples to be considered neighbors
         min_samples: int = 5,  # Minimum samples in neighborhood for core point
         random_state: int = None,
         max_core_points: int = 0,
